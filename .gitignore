@@ -1,0 +1,8 @@
+[Bb]in/
+[Oo]bj/
+.vs/
+*.user
+*.suo
+MSS60 DataLogger/Logs/
+/docs/
+MSS60 DataLogger/include/EdiabasLib.dll
