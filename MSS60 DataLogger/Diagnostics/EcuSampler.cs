@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using EdiabasLib;
 
 namespace MSS60_DataLogger.Diagnostics;
@@ -106,6 +107,46 @@ public sealed class EcuSampler : IDisposable
                 IdentityReceived?.Invoke(identity);
             }
 
+            // 選択した測定値のうち、この個体の MSS60.prg では未対応のものがないか 1 項目ずつ確認する。
+            // STATUS_MESSWERTBLOCK_LESEN は要求した Arg が 1 つでも未対応だとブロック全体を
+            // JOB_STATUS=ERROR_ARGUMENT で拒否するため、車両や SGBD バージョンによって
+            // 対応状況が異なりうる項目を先に取り除いておかないと、全項目が読めなくなってしまう。
+            // この検証呼び出しでは、カタログの ResultName とジョブが実際に返す結果名がズレている
+            // ケースも一緒に検出する(例: カタログ上は STAT_..._VOR_KAT_BANK_1_WERT のはずが、
+            // 実際には STAT_..._VKAT_B1_WERT のような省略名で返ってくる個体がある)。
+            // 1 項目だけを要求しているので、値そのもの("_WERT" で終わるキー)は 1 つしかないはず。
+            Dictionary<string, string> effectiveResultName = [];
+            List<MeasurementDefinition> supported = [];
+            List<MeasurementDefinition> unsupported = [];
+            foreach (MeasurementDefinition definition in _selection)
+            {
+                ediabas.ArgString = "JA;" + definition.Arg;
+                ediabas.ExecuteJob(JobName);
+
+                if (!TryReadResultSet(ediabas, out var probeResult) || GetJobStatus(probeResult) != "OKAY")
+                {
+                    unsupported.Add(definition);
+                    continue;
+                }
+
+                supported.Add(definition);
+                effectiveResultName[definition.Arg] = ResolveResultKey(probeResult, definition.ResultName);
+            }
+
+            if (unsupported.Count > 0)
+            {
+                string names = string.Join('、', unsupported.Select(d => d.Description));
+                StatusChanged?.Invoke($"この ECU では未対応のため除外しました: {names}");
+            }
+
+            if (supported.Count == 0)
+            {
+                Faulted?.Invoke("選択した測定値がすべてこの ECU では未対応でした。");
+                return;
+            }
+
+            argList = string.Join(';', supported.Select(d => d.Arg));
+
             // MODE=JA は「ブロック消去 → 定義 → 読み出し」で 3 往復、MODE=NEIN は読み出しのみの 1 往復。
             // 最初の 1 回だけ JA でブロックを定義し、以降は NEIN で読むことでサンプリングレートを稼ぐ。
             bool blockDefined = false;
@@ -160,7 +201,7 @@ public sealed class EcuSampler : IDisposable
                 }
 
                 consecutiveFailures = 0;
-                SampleReceived?.Invoke(new SampleSnapshot(DateTime.Now, ExtractValues(resultSet)));
+                SampleReceived?.Invoke(new SampleSnapshot(DateTime.Now, ExtractValues(resultSet, effectiveResultName)));
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -227,12 +268,35 @@ public sealed class EcuSampler : IDisposable
     private static string? GetJobStatus(Dictionary<string, EdiabasNet.ResultData> resultSet) =>
         resultSet.TryGetValue("JOB_STATUS", out EdiabasNet.ResultData? data) ? data.OpData as string : null;
 
-    private double?[] ExtractValues(Dictionary<string, EdiabasNet.ResultData> resultSet)
+    /// <summary>
+    /// カタログの ResultName がそのまま見つかればそれを使う。見つからなければ、
+    /// (1 項目だけ要求した検証呼び出しの)結果セットの中から "_WERT" で終わるキーを探して代用する。
+    /// SGBD バージョンによる結果名の省略・表記ゆれ(例: VOR_KAT_BANK_1 → VKAT_B1)を吸収するため。
+    /// </summary>
+    private static string ResolveResultKey(Dictionary<string, EdiabasNet.ResultData> resultSet, string expectedResultName)
+    {
+        if (resultSet.ContainsKey(expectedResultName))
+        {
+            return expectedResultName;
+        }
+
+        string? fallback = resultSet.Keys.FirstOrDefault(k => k.EndsWith("_WERT", StringComparison.Ordinal));
+        return fallback ?? expectedResultName;
+    }
+
+    private double?[] ExtractValues(
+        Dictionary<string, EdiabasNet.ResultData> resultSet,
+        IReadOnlyDictionary<string, string> effectiveResultName)
     {
         var values = new double?[_selection.Count];
         for (int i = 0; i < _selection.Count; i++)
         {
-            values[i] = resultSet.TryGetValue(_selection[i].ResultName, out EdiabasNet.ResultData? data)
+            MeasurementDefinition definition = _selection[i];
+            string key = effectiveResultName.TryGetValue(definition.Arg, out string? resolved)
+                ? resolved
+                : definition.ResultName;
+
+            values[i] = resultSet.TryGetValue(key, out EdiabasNet.ResultData? data)
                 ? ToDouble(data.OpData)
                 : null;
         }

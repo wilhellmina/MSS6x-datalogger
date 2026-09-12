@@ -226,6 +226,12 @@ public partial class MainWindow : Window
 
         if (sampler is not null)
         {
+            // イベント購読を外してから Dispose する。外さないと、Faulted で Disconnect
+            // (このメソッド)を呼んだ直後にワーカースレッドの finally 節が発火する
+            // StatusChanged("切断しました。") が届いてしまい、Faulted の本来のメッセージが
+            // 画面上で即座に上書きされてしまう。
+            sampler.DetachEvents();
+
             // Dispose はワーカースレッドの終了待ちを含むため、UI を止めないよう別スレッドで行う。
             Task.Run(sampler.Dispose);
         }
