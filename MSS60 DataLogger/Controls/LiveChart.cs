@@ -42,6 +42,10 @@ public sealed class ChartSeries
 /// <summary>
 /// 直近一定時間の測定値をスクロール表示する折れ線グラフ。
 /// 項目ごとに単位が大きく違うため、線はそれぞれ自身の最小〜最大で正規化して描く。
+/// ただし変動幅が値の大きさに対してごくわずかな項目(例: 外気圧が 1000→1001 mbar 程度だけ揺れる)を
+/// そのまま最小〜最大で正規化すると、実質ノイズ程度の変化が画面いっぱいの上下動に誇張されてしまう。
+/// それを防ぐため、変動幅には値の大きさに対する最低限の割合(<see cref="MinRelativeSpanFraction"/>)を
+/// 保証し、それより小さい変動はほぼ横一直線に近い見た目のままにする。
 /// </summary>
 public sealed class LiveChart : FrameworkElement
 {
@@ -49,6 +53,10 @@ public sealed class LiveChart : FrameworkElement
     private const double RightMargin = 8;
     private const double TopMargin = 8;
     private const double BottomMargin = 20;
+
+    /// <summary>正規化に使う変動幅の最低ライン。値の大きさ(|min|と|max|の大きい方)に対するこの割合より
+    /// 実際の変動幅が小さい場合、その割合分の幅を最低保証してから正規化する。</summary>
+    private const double MinRelativeSpanFraction = 0.05;
 
     private static readonly Color[] Palette =
     [
@@ -240,9 +248,22 @@ public sealed class LiveChart : FrameworkElement
 
         if (Math.Abs(max - min) < 1e-9)
         {
-            // 値が一定のときは中央に水平線を引く
+            // 値が完全に一定のときは中央に水平線を引く
             min -= 1;
             max += 1;
+        }
+        else
+        {
+            // 変動幅が値の大きさに対してごくわずかなときは、ノイズだけで画面いっぱいに
+            // 振れて見えないよう、値の大きさに応じた最低限の幅を確保する。
+            double magnitude = Math.Max(Math.Abs(min), Math.Abs(max));
+            double minSpan = magnitude * MinRelativeSpanFraction;
+            if (max - min < minSpan)
+            {
+                double mid = (max + min) / 2;
+                min = mid - (minSpan / 2);
+                max = mid + (minSpan / 2);
+            }
         }
 
         var geometry = new StreamGeometry();
