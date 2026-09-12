@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.IO;
 using System.Reflection;
 
@@ -60,17 +59,20 @@ public static class MeasurementCatalog
             }
 
             string unit = fields[5].Trim();
+            unit = unit == "-" ? string.Empty : unit;
+            string category = MeasurementCategories.Classify(arg, resultName);
             definitions.Add(new MeasurementDefinition(
                 Arg: arg,
                 Id: fields[1].Trim(),
                 ResultName: resultName,
-                Unit: unit == "-" ? string.Empty : unit,
+                Unit: unit,
                 Description: fields[10].Trim(),
-                Category: MeasurementCategories.Classify(arg, resultName)));
+                Category: category,
+                SubCategory: MeasurementCategories.ClassifySub(category, resultName, unit)));
         }
 
         return definitions
-            .OrderBy(d => d.Description, StringComparer.Create(CultureInfo.GetCultureInfo("ja-JP"), ignoreCase: false))
+            .OrderBy(d => d.Description, NaturalStringComparer.Instance)
             .ToList();
     }
 

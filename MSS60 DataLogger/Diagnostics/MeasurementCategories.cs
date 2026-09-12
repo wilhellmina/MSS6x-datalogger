@@ -20,6 +20,9 @@ public static class MeasurementCategories
     public const string Diagnostics = "診断・状態";
     public const string Other = "その他";
 
+    /// <summary>サブカテゴリ名: 物理量に換算する前の生データ(ROHWERT・AD_WANDLER)。カテゴリを問わず使う。</summary>
+    private const string RawSub = "生の値";
+
     /// <summary>画面に出す順序。</summary>
     public static readonly string[] DisplayOrder =
     [
@@ -118,6 +121,24 @@ public static class MeasurementCategories
         ("SCHALTER", Diagnostics),
     ];
 
+    /// <summary>カテゴリ内でさらに小分けする見出し。該当なしは空文字(見出しなしでそのまま並べる)。</summary>
+    private static readonly (string Category, string Keyword, string SubCategory)[] SubRules =
+    [
+        (Vanos, "VENTIL-STROM", "生の値"),
+    ];
+
+    /// <summary>カテゴリを問わず「生の値」に小分けするキーワード。物理量への換算前の生データ。</summary>
+    private static readonly string[] RawKeywords = ["ROHWERT", "AD_WANDLER"];
+
+    /// <summary>単位がこれに一致する項目も、キーワードに関わらず「生の値」に小分けする。
+    /// バッテリー電圧(Volt)のようにそれ自体が意味を持つ単位は含めない。</summary>
+    private static readonly string[] RawUnits = ["mV", "Ohm", "Hz"];
+
+    /// <summary>結果名に ROHWERT 等が含まれていても、通常の項目としてそのまま並べたいものの例外リスト。
+    /// 例: 外気圧(PUMG_ROH)は名前に ROHWERT を含むが mbar 単位でそのまま使える値なので、
+    /// 「生の値」には小分けしない。</summary>
+    private static readonly string[] RawExceptions = ["STAT_UMGEBUNGSDRUCK_ROHWERT_SENSOR_WERT"];
+
     public static string Classify(string arg, string resultName)
     {
         if (BasicArgs.Contains(arg))
@@ -134,5 +155,36 @@ public static class MeasurementCategories
         }
 
         return Other;
+    }
+
+    public static string ClassifySub(string category, string resultName, string unit)
+    {
+        if (RawExceptions.Contains(resultName, StringComparer.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        foreach ((string ruleCategory, string keyword, string subCategory) in SubRules)
+        {
+            if (ruleCategory == category && resultName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                return subCategory;
+            }
+        }
+
+        foreach (string keyword in RawKeywords)
+        {
+            if (resultName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                return RawSub;
+            }
+        }
+
+        if (RawUnits.Contains(unit, StringComparer.OrdinalIgnoreCase))
+        {
+            return RawSub;
+        }
+
+        return string.Empty;
     }
 }

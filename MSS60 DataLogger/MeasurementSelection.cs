@@ -38,13 +38,13 @@ public sealed class SelectableMeasurement(MeasurementDefinition definition, Acti
     }
 }
 
-/// <summary>「項目」タブのカテゴリ 1 つ分。</summary>
-public sealed class MeasurementGroup : INotifyPropertyChanged
+/// <summary>カテゴリ内でさらに小分けした区画 1 つ分。<see cref="Name"/> が空文字なら見出しを出さずそのまま並べる。
+/// 名前付きの区画は画面上で開閉できるプルダウン(入れ子の Expander)として表示する。</summary>
+public sealed class MeasurementSection : INotifyPropertyChanged
 {
     private bool _isExpanded;
-    private bool _isVisible = true;
 
-    public MeasurementGroup(string name, IReadOnlyList<SelectableMeasurement> items)
+    public MeasurementSection(string name, IReadOnlyList<SelectableMeasurement> items)
     {
         Name = name;
         AllItems = items;
@@ -55,9 +55,75 @@ public sealed class MeasurementGroup : INotifyPropertyChanged
 
     public string Name { get; }
 
+    public bool HasName => Name.Length > 0;
+
     public IReadOnlyList<SelectableMeasurement> AllItems { get; }
 
     public ObservableCollection<SelectableMeasurement> VisibleItems { get; }
+
+    public bool IsVisible => VisibleItems.Count > 0;
+
+    /// <summary>名前付き区画(プルダウン)の開閉状態。無名の区画では使わない。</summary>
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (_isExpanded == value)
+            {
+                return;
+            }
+
+            _isExpanded = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsExpanded)));
+        }
+    }
+
+    /// <summary>検索語で表示項目を絞り込む。語が空ならすべて表示する。</summary>
+    public void ApplyFilter(string query)
+    {
+        VisibleItems.Clear();
+
+        IEnumerable<SelectableMeasurement> matches = query.Length == 0
+            ? AllItems
+            : AllItems.Where(i => i.Definition.SearchKey.Contains(query));
+
+        foreach (SelectableMeasurement item in matches)
+        {
+            VisibleItems.Add(item);
+        }
+
+        if (VisibleItems.Count > 0 && query.Length > 0)
+        {
+            IsExpanded = true; // 一致があるプルダウンは自動で開く
+        }
+    }
+}
+
+/// <summary>「項目」タブのカテゴリ 1 つ分。</summary>
+public sealed class MeasurementGroup : INotifyPropertyChanged
+{
+    private bool _isExpanded;
+    private bool _isVisible = true;
+
+    public MeasurementGroup(string name, IReadOnlyList<SelectableMeasurement> items)
+    {
+        Name = name;
+        AllItems = items;
+        Sections = BuildSections(items);
+        VisibleSections = [.. Sections];
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public string Name { get; }
+
+    public IReadOnlyList<SelectableMeasurement> AllItems { get; }
+
+    /// <summary>見出しなしの区画(先頭)と、名前付きの小分け区画からなる一覧。</summary>
+    public IReadOnlyList<MeasurementSection> Sections { get; }
+
+    public ObservableCollection<MeasurementSection> VisibleSections { get; }
 
     public bool IsExpanded
     {
@@ -101,34 +167,75 @@ public sealed class MeasurementGroup : INotifyPropertyChanged
         }
     }
 
-    public void RefreshHeader() => Notify(nameof(Header));
+    /// <summary>見出し横の一斉解除チェックボックスの表示状態。全選択なら true、未選択なら false、一部だけなら null(中間状態)。
+    /// 全選択を持ちかけると上限超過などで意図しない挙動になりやすいため、このチェックボックスからは選択できないようにし、
+    /// 見た目の状態表示と一斉解除の起点としてのみ使う。</summary>
+    public bool? AllSelected
+    {
+        get
+        {
+            int selected = AllItems.Count(i => i.IsSelected);
+            if (selected == 0)
+            {
+                return false;
+            }
+
+            return selected == AllItems.Count ? true : null;
+        }
+    }
+
+    /// <summary>1 件でも選択済みの項目があるか。一斉解除チェックボックスを操作できるかの判定に使う。</summary>
+    public bool HasAnySelected => AllItems.Any(i => i.IsSelected);
+
+    /// <summary>見出しと、一斉解除チェックボックスの状態をまとめて更新する。</summary>
+    public void RefreshHeader()
+    {
+        Notify(nameof(Header));
+        Notify(nameof(AllSelected));
+        Notify(nameof(HasAnySelected));
+    }
 
     /// <summary>検索語で表示項目を絞り込む。語が空ならすべて表示する。</summary>
     public void ApplyFilter(string query)
     {
-        VisibleItems.Clear();
+        VisibleSections.Clear();
 
-        if (query.Length == 0)
+        foreach (MeasurementSection section in Sections)
         {
-            foreach (SelectableMeasurement item in AllItems)
+            section.ApplyFilter(query);
+            if (section.IsVisible)
             {
-                VisibleItems.Add(item);
+                VisibleSections.Add(section);
             }
-
-            IsVisible = true;
-            return;
         }
 
-        foreach (SelectableMeasurement item in AllItems.Where(i => i.Definition.SearchKey.Contains(query)))
-        {
-            VisibleItems.Add(item);
-        }
-
-        IsVisible = VisibleItems.Count > 0;
-        if (IsVisible)
+        IsVisible = VisibleSections.Count > 0;
+        if (IsVisible && query.Length > 0)
         {
             IsExpanded = true; // 一致があるカテゴリは自動で開く
         }
+    }
+
+    /// <summary>小分け先(SubCategory)が無い項目をまとめた無見出し区画を先頭に、
+    /// 名前付きの小分けはその後ろに続ける。</summary>
+    private static IReadOnlyList<MeasurementSection> BuildSections(IReadOnlyList<SelectableMeasurement> items)
+    {
+        List<MeasurementSection> sections = [];
+
+        List<SelectableMeasurement> unlabeled = [.. items.Where(i => i.Definition.SubCategory.Length == 0)];
+        if (unlabeled.Count > 0)
+        {
+            sections.Add(new MeasurementSection(string.Empty, unlabeled));
+        }
+
+        foreach (IGrouping<string, SelectableMeasurement> named in items
+            .Where(i => i.Definition.SubCategory.Length > 0)
+            .GroupBy(i => i.Definition.SubCategory))
+        {
+            sections.Add(new MeasurementSection(named.Key, [.. named]));
+        }
+
+        return sections;
     }
 
     private void Notify(string propertyName) =>

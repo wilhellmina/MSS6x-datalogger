@@ -2,11 +2,49 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:MSS60_DataLogger.Controls"
+        xmlns:local="clr-namespace:MSS60_DataLogger"
         xmlns:primitives="clr-namespace:System.Windows.Controls.Primitives;assembly=PresentationFramework"
         Title="MSS60 DataLogger" Height="680" Width="1100"
         MinHeight="460" MinWidth="820"
         Background="{StaticResource WindowBackground}"
         FontFamily="Yu Gothic UI">
+    <Window.Resources>
+        <!-- カテゴリ内の項目 1 件分(チェックボックス)。名前付き・無名どちらの区画でも使う。 -->
+        <DataTemplate x:Key="MeasurementItemTemplate">
+            <CheckBox IsChecked="{Binding IsSelected}" Margin="0,2"
+                      AutomationProperties.Name="{Binding Definition.Description}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding Definition.Description}"
+                               TextTrimming="CharacterEllipsis" MaxWidth="210"
+                               ToolTip="{Binding Definition.TechnicalName}"
+                               ToolTipService.InitialShowDelay="200" />
+                    <TextBlock Text="{Binding Definition.Unit}" Margin="6,0,0,0"
+                               Foreground="{StaticResource SubtleForegroundBrush}" />
+                </StackPanel>
+            </CheckBox>
+        </DataTemplate>
+
+        <!-- 無名の区画: 見出しを出さずそのまま項目を並べる。 -->
+        <DataTemplate x:Key="UnlabeledSectionTemplate">
+            <ItemsControl ItemsSource="{Binding VisibleItems}" ItemTemplate="{StaticResource MeasurementItemTemplate}" />
+        </DataTemplate>
+
+        <!-- 名前付きの区画: 開閉できるプルダウン(入れ子の Expander)として表示する。 -->
+        <DataTemplate x:Key="NamedSectionTemplate">
+            <Expander IsExpanded="{Binding IsExpanded}" Margin="0,2,0,4"
+                      Foreground="{StaticResource SubtleForegroundBrush}" FontSize="11">
+                <Expander.Header>
+                    <TextBlock Text="{Binding Name}" FontStyle="Italic" />
+                </Expander.Header>
+                <ItemsControl ItemsSource="{Binding VisibleItems}" Margin="10,2,0,0"
+                              ItemTemplate="{StaticResource MeasurementItemTemplate}" />
+            </Expander>
+        </DataTemplate>
+
+        <local:SectionTemplateSelector x:Key="SectionSelector"
+                                        NamedTemplate="{StaticResource NamedSectionTemplate}"
+                                        UnlabeledTemplate="{StaticResource UnlabeledSectionTemplate}" />
+    </Window.Resources>
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -131,28 +169,19 @@
                                                   Visibility="{Binding IsVisible,
                                                                Converter={StaticResource BoolToVisibility}}">
                                             <Expander.Header>
-                                                <TextBlock Text="{Binding Header}" FontWeight="SemiBold"
-                                                           Foreground="{StaticResource ForegroundBrush}" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <CheckBox IsThreeState="True"
+                                                              IsChecked="{Binding AllSelected, Mode=OneWay}"
+                                                              IsEnabled="{Binding HasAnySelected}"
+                                                              Click="OnCategoryClearAllClick"
+                                                              VerticalAlignment="Center" Margin="0,0,6,0"
+                                                              ToolTip="カテゴリ内で選択中の項目を一斉解除します" />
+                                                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource ForegroundBrush}" />
+                                                </StackPanel>
                                             </Expander.Header>
-                                            <ItemsControl ItemsSource="{Binding VisibleItems}" Margin="18,2,0,6">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <CheckBox IsChecked="{Binding IsSelected}" Margin="0,2"
-                                                                  AutomationProperties.Name="{Binding Definition.Description}">
-                                                            <StackPanel Orientation="Horizontal">
-                                                                <TextBlock Text="{Binding Definition.Description}"
-                                                                           TextTrimming="CharacterEllipsis"
-                                                                           MaxWidth="210"
-                                                                           ToolTip="{Binding Definition.TechnicalName}"
-                                                                           ToolTipService.InitialShowDelay="200" />
-                                                                <TextBlock Text="{Binding Definition.Unit}"
-                                                                           Margin="6,0,0,0"
-                                                                           Foreground="{StaticResource SubtleForegroundBrush}" />
-                                                            </StackPanel>
-                                                        </CheckBox>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
+                                            <ItemsControl ItemsSource="{Binding VisibleSections}" Margin="18,2,0,6"
+                                                          ItemTemplateSelector="{StaticResource SectionSelector}" />
                                         </Expander>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

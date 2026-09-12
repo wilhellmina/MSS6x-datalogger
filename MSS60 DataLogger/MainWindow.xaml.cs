@@ -303,6 +303,28 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>カテゴリ見出しのチェックボックス。このカテゴリで選択中の項目をまとめて解除する。
+    /// 全選択は同時記録数の上限超過などで意図しない挙動になりやすいため、一斉解除の用途に絞ってある
+    /// (選択済みが 1 件も無いときは <see cref="MeasurementGroup.HasAnySelected"/> により操作不可にしている)。</summary>
+    private void OnCategoryClearAllClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: MeasurementGroup group })
+        {
+            return;
+        }
+
+        if (IsRecording)
+        {
+            SetStatus("記録中は項目を変更できません。いったん記録を停止してください。");
+            return;
+        }
+
+        foreach (SelectableMeasurement item in group.AllItems)
+        {
+            item.IsSelected = false;
+        }
+    }
+
     /// <summary>チェックが変わったときの処理。上限超過と記録中の変更を弾く。</summary>
     private void OnMeasurementToggled(SelectableMeasurement item)
     {

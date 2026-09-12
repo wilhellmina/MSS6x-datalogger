@@ -9,13 +9,15 @@ namespace MSS60_DataLogger.Diagnostics;
 /// <param name="Unit">単位(例: "U/min")。単位なしの項目は空文字。</param>
 /// <param name="Description">日本語の説明。</param>
 /// <param name="Category">画面上のグループ分け。</param>
+/// <param name="SubCategory">カテゴリ内でさらに小分けする見出し。無ければ空文字。</param>
 public sealed record MeasurementDefinition(
     string Arg,
     string Id,
     string ResultName,
     string Unit,
     string Description,
-    string Category)
+    string Category,
+    string SubCategory = "")
 {
     /// <summary>一覧表示や CSV のヘッダーに使う名前。</summary>
     public string DisplayName => string.IsNullOrEmpty(Description) ? Arg : Description;
