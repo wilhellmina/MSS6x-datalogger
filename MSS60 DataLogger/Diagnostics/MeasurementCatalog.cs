@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 
@@ -16,14 +17,34 @@ public static class MeasurementCatalog
     /// <summary>初期選択される項目(短縮名)。</summary>
     public static readonly string[] DefaultSelection =
     [
-        "N", "GANG", "LAM_IST_MW_B1", "LAM_IST_MW_B2", "OZ_ANZEIGE_KOMBI",
+        "N", "GANG", "LAM_IST_MW_B1", "LAM_IST_MW_B2",
         "TUMG", "PUMG", "TOEL", "PWG", "TMOT",
     ];
 
     private static IReadOnlyList<MeasurementDefinition>? _cache;
 
     /// <summary>全測定値定義。結果名が重複するエイリアスは最初の 1 件だけを残す。</summary>
-    public static IReadOnlyList<MeasurementDefinition> All => _cache ??= Load();
+    public static IReadOnlyList<MeasurementDefinition> All
+    {
+        get
+        {
+            if (_cache is { } cached)
+            {
+                return cached;
+            }
+
+            _cache = Load();
+
+            // DefaultSelection に CSV へ存在しない Arg が紛れ込むと、既定選択から静かに
+            // 抜け落ちるだけで気づきにくい(実際に OZ_ANZEIGE_KOMBI がそうだった)。
+            // デバッグ時だけでも検出できるようにしておく。
+            Debug.Assert(
+                DefaultSelection.All(arg => Find(arg) is not null),
+                "DefaultSelection に CSV 上で見つからない Arg があります。綴りを確認してください。");
+
+            return _cache;
+        }
+    }
 
     public static MeasurementDefinition? Find(string arg) =>
         All.FirstOrDefault(d => string.Equals(d.Arg, arg, StringComparison.OrdinalIgnoreCase));
