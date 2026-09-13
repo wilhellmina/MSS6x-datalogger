@@ -25,10 +25,12 @@ public partial class MainWindow : Window
     private readonly List<MeasurementDefinition> _selection = [];
     private readonly List<SelectableMeasurement> _selectable = [];
     private readonly List<MeasurementGroup> _groups = [];
+    private readonly ObservableCollection<SelectableMeasurement> _favorites = [];
 
     private EcuSampler? _sampler;
     private CsvSampleWriter? _logWriter;
     private bool _suppressSelectionUpdates;
+    private bool _suppressFavoriteUpdates;
     private string? _currentVin;
 
     // 続けてチェックを付け外ししたときに毎回つなぎ直さないよう、少し待ってからまとめて反映する。
@@ -62,10 +64,14 @@ public partial class MainWindow : Window
     /// <summary>カタログ全項目をカテゴリごとにまとめ、前回終了時(無ければ既定)の項目にチェックを入れる。</summary>
     private void BuildCategoryTree()
     {
-        List<string> savedSelection = AppSettingsStore.Load().SelectedMeasurementArgs;
-        HashSet<string> defaults = savedSelection.Count > 0 ? [.. savedSelection] : [.. MeasurementCatalog.DefaultSelection];
+        AppSettings settings = AppSettingsStore.Load();
+        HashSet<string> defaults = settings.SelectedMeasurementArgs.Count > 0
+            ? [.. settings.SelectedMeasurementArgs]
+            : [.. MeasurementCatalog.DefaultSelection];
+        HashSet<string> favorites = [.. settings.FavoriteMeasurementArgs];
 
-        _selectable.AddRange(MeasurementCatalog.All.Select(d => new SelectableMeasurement(d, OnMeasurementToggled)));
+        _selectable.AddRange(MeasurementCatalog.All.Select(d =>
+            new SelectableMeasurement(d, OnMeasurementToggled, OnMeasurementFavoriteToggled)));
 
         foreach (string category in MeasurementCategories.DisplayOrder)
         {
@@ -80,17 +86,30 @@ public partial class MainWindow : Window
         }
 
         CategoryList.ItemsSource = _groups;
+        FavoritesList.ItemsSource = _favorites;
 
-        // 既定の項目にチェックを入れる(この間は再構築を 1 回にまとめる)
+        // 既定の項目にチェックを入れ、お気に入りを復元する(この間は再構築を 1 回にまとめる)
         _suppressSelectionUpdates = true;
-        foreach (SelectableMeasurement item in _selectable.Where(s => defaults.Contains(s.Definition.Arg)))
+        _suppressFavoriteUpdates = true;
+        foreach (SelectableMeasurement item in _selectable)
         {
-            item.IsSelected = true;
+            if (defaults.Contains(item.Definition.Arg))
+            {
+                item.IsSelected = true;
+            }
+
+            if (favorites.Contains(item.Definition.Arg))
+            {
+                item.IsFavorite = true;
+                _favorites.Add(item);
+            }
         }
 
         _suppressSelectionUpdates = false;
+        _suppressFavoriteUpdates = false;
 
         _groups[0].IsExpanded = true; // 「基本」だけ最初から開いておく
+        UpdateFavoritesEmptyState();
         RebuildSelection();
     }
 
@@ -389,8 +408,68 @@ public partial class MainWindow : Window
 
         SelectionCountText.Text = $"{_selection.Count} / {MeasurementCatalog.MaxSelectableCount}";
 
-        // 次回起動時にも同じ項目を復元できるよう、選択のたびに保存しておく。
-        AppSettingsStore.Save(new AppSettings { SelectedMeasurementArgs = [.. _selection.Select(d => d.Arg)] });
+        SaveSettings();
+    }
+
+    /// <summary>選択項目・お気に入りの現在の状態を、次回起動時に復元できるよう保存する。</summary>
+    private void SaveSettings() => AppSettingsStore.Save(new AppSettings
+    {
+        SelectedMeasurementArgs = [.. _selection.Select(d => d.Arg)],
+        FavoriteMeasurementArgs = [.. _favorites.Select(f => f.Definition.Arg)],
+    });
+
+    #endregion
+
+    #region お気に入り
+
+    /// <summary>各項目の☆ボタン。記録用の選択とは独立にお気に入り登録だけを切り替える。</summary>
+    private void OnFavoriteToggleClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: SelectableMeasurement item })
+        {
+            item.IsFavorite = !item.IsFavorite;
+        }
+    }
+
+    /// <summary>お気に入りの追加・削除に応じて一覧を更新し、保存する。</summary>
+    private void OnMeasurementFavoriteToggled(SelectableMeasurement item)
+    {
+        if (_suppressFavoriteUpdates)
+        {
+            return;
+        }
+
+        if (item.IsFavorite)
+        {
+            _favorites.Add(item);
+        }
+        else
+        {
+            _favorites.Remove(item);
+        }
+
+        UpdateFavoritesEmptyState();
+        SaveSettings();
+    }
+
+    /// <summary>「お気に入り」タブの案内文を、お気に入りが 0 件かどうかで出し分ける。</summary>
+    private void UpdateFavoritesEmptyState() =>
+        FavoritesEmptyText.Visibility = _favorites.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>「お気に入り」タブの一斉解除ボタン。カテゴリの一斉解除と同じく、お気に入り全体を
+    /// 選択状態にする操作は用意しない(上限超過などの意図しない挙動を避けるため)。</summary>
+    private void OnFavoritesClearSelectionClick(object sender, RoutedEventArgs e)
+    {
+        if (IsRecording)
+        {
+            SetStatus("記録中は項目を変更できません。いったん記録を停止してください。");
+            return;
+        }
+
+        foreach (SelectableMeasurement item in _favorites.ToArray())
+        {
+            item.IsSelected = false;
+        }
     }
 
     #endregion

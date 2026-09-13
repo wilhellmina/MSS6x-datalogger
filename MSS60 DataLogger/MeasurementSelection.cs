@@ -5,10 +5,14 @@ using MSS60_DataLogger.Diagnostics;
 namespace MSS60_DataLogger;
 
 /// <summary>「項目」タブの 1 行。チェックが入ったものだけがログ対象になる。</summary>
-public sealed class SelectableMeasurement(MeasurementDefinition definition, Action<SelectableMeasurement> onToggled)
+public sealed class SelectableMeasurement(
+    MeasurementDefinition definition,
+    Action<SelectableMeasurement> onToggled,
+    Action<SelectableMeasurement> onFavoriteToggled)
     : INotifyPropertyChanged
 {
     private bool _isSelected;
+    private bool _isFavorite;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -27,6 +31,24 @@ public sealed class SelectableMeasurement(MeasurementDefinition definition, Acti
             _isSelected = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
             onToggled(this);
+        }
+    }
+
+    /// <summary>お気に入り登録の有無。記録用の選択(<see cref="IsSelected"/>)とは独立していて、
+    /// お気に入りに入っていても未選択、選択中でもお気に入りに入っていない、のどちらもあり得る。</summary>
+    public bool IsFavorite
+    {
+        get => _isFavorite;
+        set
+        {
+            if (_isFavorite == value)
+            {
+                return;
+            }
+
+            _isFavorite = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsFavorite)));
+            onFavoriteToggled(this);
         }
     }
 

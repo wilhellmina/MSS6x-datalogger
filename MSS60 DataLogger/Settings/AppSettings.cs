@@ -5,4 +5,7 @@ public sealed class AppSettings
 {
     /// <summary>前回チェックしていた測定値の短縮名(Arg)一覧。</summary>
     public List<string> SelectedMeasurementArgs { get; set; } = [];
+
+    /// <summary>お気に入りに登録済みの測定値の短縮名(Arg)一覧。</summary>
+    public List<string> FavoriteMeasurementArgs { get; set; } = [];
 }

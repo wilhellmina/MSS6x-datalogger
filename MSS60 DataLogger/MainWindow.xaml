@@ -9,19 +9,39 @@
         Background="{StaticResource WindowBackground}"
         FontFamily="Yu Gothic UI">
     <Window.Resources>
-        <!-- カテゴリ内の項目 1 件分(チェックボックス)。名前付き・無名どちらの区画でも使う。 -->
+        <!-- カテゴリ内の項目 1 件分(☆ボタン+チェックボックス)。名前付き・無名どちらの区画でも、
+             「お気に入り」タブでも共通で使う。 -->
         <DataTemplate x:Key="MeasurementItemTemplate">
-            <CheckBox IsChecked="{Binding IsSelected}" Margin="0,2"
-                      AutomationProperties.Name="{Binding Definition.Description}">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="{Binding Definition.Description}"
-                               TextTrimming="CharacterEllipsis" MaxWidth="210"
-                               ToolTip="{Binding Definition.TechnicalName}"
-                               ToolTipService.InitialShowDelay="200" />
-                    <TextBlock Text="{Binding Definition.Unit}" Margin="6,0,0,0"
-                               Foreground="{StaticResource SubtleForegroundBrush}" />
-                </StackPanel>
-            </CheckBox>
+            <StackPanel Orientation="Horizontal" Margin="0,2">
+                <Button Click="OnFavoriteToggleClick" Background="Transparent" BorderThickness="0"
+                        Padding="2" Margin="0,0,4,0" Cursor="Hand" ToolTip="お気に入り">
+                    <TextBlock FontSize="13">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="☆" />
+                                <Setter Property="Foreground" Value="{StaticResource SubtleForegroundBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                        <Setter Property="Text" Value="★" />
+                                        <Setter Property="Foreground" Value="#FFD54F" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Button>
+                <CheckBox IsChecked="{Binding IsSelected}"
+                          AutomationProperties.Name="{Binding Definition.Description}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Definition.Description}"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="210"
+                                   ToolTip="{Binding Definition.TechnicalName}"
+                                   ToolTipService.InitialShowDelay="200" />
+                        <TextBlock Text="{Binding Definition.Unit}" Margin="6,0,0,0"
+                                   Foreground="{StaticResource SubtleForegroundBrush}" />
+                    </StackPanel>
+                </CheckBox>
+            </StackPanel>
         </DataTemplate>
 
         <!-- 無名の区画: 見出しを出さずそのまま項目を並べる。 -->
@@ -187,6 +207,29 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </ScrollViewer>
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="お気に入り">
+                    <Grid Margin="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0" Margin="0,0,0,6" LastChildFill="False">
+                            <Button DockPanel.Dock="Right" Content="選択中をすべて解除"
+                                    Click="OnFavoritesClearSelectionClick" />
+                        </DockPanel>
+
+                        <Grid Grid.Row="1">
+                            <TextBlock x:Name="FavoritesEmptyText" TextWrapping="Wrap"
+                                       Foreground="{StaticResource SubtleForegroundBrush}"
+                                       Text="お気に入りはまだありません。「項目」タブで各行の☆をクリックすると、ここに追加されます。" />
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsControl x:Name="FavoritesList" ItemTemplate="{StaticResource MeasurementItemTemplate}" />
+                            </ScrollViewer>
+                        </Grid>
                     </Grid>
                 </TabItem>
             </TabControl>
