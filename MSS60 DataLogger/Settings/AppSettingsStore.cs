@@ -4,15 +4,13 @@ using System.Text.Json;
 namespace MSS60_DataLogger.Settings;
 
 /// <summary>
-/// アプリ設定を %AppData%\MSS60 DataLogger\settings.json に保存・読み込みする。
-/// ビルド出力フォルダ(bin)の外に置くことで、リビルドしても前回の設定が消えないようにしている。
+/// アプリ設定を実行ファイルと同じフォルダの settings.json に保存・読み込みする。
+/// 配布先でどこに展開しても、その場に設定が残る(インストーラー不要のポータブル運用を想定)。
+/// 開発中に dotnet clean 等で bin フォルダごと消すと、この設定も一緒に消える点には注意。
 /// </summary>
 public static class AppSettingsStore
 {
-    private static readonly string FilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "MSS60 DataLogger",
-        "settings.json");
+    private static readonly string FilePath = Path.Combine(AppContext.BaseDirectory, "settings.json");
 
     /// <summary>
     /// 保存済み設定を読み込む。ファイルが無い・壊れている場合は既定値(空)を返す。
