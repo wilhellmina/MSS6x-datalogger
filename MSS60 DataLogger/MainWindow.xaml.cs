@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.IO.Ports;
+using System.Management;
+using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -119,13 +122,58 @@ public partial class MainWindow : Window
 
     private void RefreshPortList()
     {
-        string? previous = ComPortCombo.SelectedItem as string;
-        string[] ports = SerialPort.GetPortNames().OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray();
+        string? previousPort = (ComPortCombo.SelectedItem as ComPortInfo)?.PortName;
+        IReadOnlyList<ComPortInfo> ports = GetAvailablePorts();
 
         ComPortCombo.ItemsSource = ports;
-        ComPortCombo.SelectedItem = previous is not null && ports.Contains(previous)
-            ? previous
-            : ports.FirstOrDefault();
+        ComPortCombo.SelectedItem = ports.FirstOrDefault(p => p.PortName == previousPort) ?? ports.FirstOrDefault();
+    }
+
+    /// <summary>接続可能な COM ポートを、分かれば製造元名付きで列挙する。
+    /// WMI(Win32_PnPEntity)の Caption に "(COM3)" のような形で番号が入っているので、
+    /// そこから <see cref="SerialPort.GetPortNames"/> の結果と突き合わせる。
+    /// WMI が使えない環境でも、ポート番号だけは列挙を続ける。</summary>
+    private static IReadOnlyList<ComPortInfo> GetAvailablePorts()
+    {
+        HashSet<string> remaining = [.. SerialPort.GetPortNames()];
+        List<ComPortInfo> ports = [];
+
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                "SELECT Caption, Manufacturer FROM Win32_PnPEntity WHERE Caption LIKE '%(COM%'");
+            using ManagementObjectCollection devices = searcher.Get();
+
+            foreach (ManagementBaseObject device in devices)
+            {
+                string caption = device["Caption"] as string ?? string.Empty;
+                Match match = Regex.Match(caption, @"\((COM\d+)\)");
+                if (!match.Success || !remaining.Remove(match.Groups[1].Value))
+                {
+                    continue;
+                }
+
+                string portName = match.Groups[1].Value;
+                string manufacturer = (device["Manufacturer"] as string)?.Trim() ?? string.Empty;
+                string displayName = manufacturer.Length == 0
+                    ? portName
+                    : $"{portName} ({manufacturer})";
+
+                ports.Add(new ComPortInfo(portName, displayName));
+            }
+        }
+        catch (Exception ex) when (ex is ManagementException or UnauthorizedAccessException or COMException)
+        {
+            // WMI が使えない場合でも、ポート番号だけの一覧にフォールバックする(下の残り分で処理)。
+        }
+
+        // WMI 側で製造元が拾えなかった分は、番号だけで追加する。
+        foreach (string portName in remaining)
+        {
+            ports.Add(new ComPortInfo(portName, portName));
+        }
+
+        return [.. ports.OrderBy(p => p.PortName, StringComparer.OrdinalIgnoreCase)];
     }
 
     private void OnConnectClick(object sender, RoutedEventArgs e)
@@ -136,7 +184,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (ComPortCombo.SelectedItem is not string comPort)
+        if (ComPortCombo.SelectedItem is not ComPortInfo portInfo)
         {
             SetStatus("COM ポートを選択してください。");
             return;
@@ -154,7 +202,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        StartSampler(comPort);
+        StartSampler(portInfo.PortName);
         UpdateConnectionUi();
     }
 
@@ -192,7 +240,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (ComPortCombo.SelectedItem is not string comPort)
+        if (ComPortCombo.SelectedItem is not ComPortInfo portInfo)
         {
             return;
         }
@@ -217,7 +265,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            StartSampler(comPort);
+            StartSampler(portInfo.PortName);
             UpdateConnectionUi();
         }
         finally

@@ -16,6 +16,8 @@
          RuntimeIdentifier を明示しないと System.IO.Ports の実装 DLL ではなく
          プラットフォーム非依存のスタブが解決され、実行時に PlatformNotSupportedException になる。 -->
     <PackageReference Include="System.IO.Ports" Version="10.0.0" />
+    <!-- COM ポートのプルダウンに製造元名(例: FTDI)を出すため、WMI(Win32_PnPEntity)経由で取得する。 -->
+    <PackageReference Include="System.Management" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>
