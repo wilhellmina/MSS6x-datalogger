@@ -3,11 +3,13 @@ using System.IO;
 using System.IO.Ports;
 using System.Management;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using MSS60_DataLogger.Controls;
 using MSS60_DataLogger.Diagnostics;
 using MSS60_DataLogger.Logging;
@@ -129,6 +131,11 @@ public partial class MainWindow : Window
         ComPortCombo.SelectedItem = ports.FirstOrDefault(p => p.PortName == previousPort) ?? ports.FirstOrDefault();
     }
 
+    /// <summary>K+DCAN ケーブル(EDIABAS)を安定動作させるために必要な、FTDI ドライバーの
+    /// レイテンシタイマー(通称「BMオプション」)の推奨値。既定値は 16 だが、遅すぎて
+    /// 通信が不安定になるため、K+DCAN では 1 に下げることが強く推奨されている。</summary>
+    private const int RecommendedLatencyTimer = 1;
+
     /// <summary>接続可能な COM ポートを、分かれば製造元名付きで列挙する。
     /// WMI(Win32_PnPEntity)の Caption に "(COM3)" のような形で番号が入っているので、
     /// そこから <see cref="SerialPort.GetPortNames"/> の結果と突き合わせる。
@@ -141,7 +148,7 @@ public partial class MainWindow : Window
         try
         {
             using var searcher = new ManagementObjectSearcher(
-                "SELECT Caption, Manufacturer FROM Win32_PnPEntity WHERE Caption LIKE '%(COM%'");
+                "SELECT Caption, Manufacturer, PNPDeviceID FROM Win32_PnPEntity WHERE Caption LIKE '%(COM%'");
             using ManagementObjectCollection devices = searcher.Get();
 
             foreach (ManagementBaseObject device in devices)
@@ -159,6 +166,12 @@ public partial class MainWindow : Window
                     ? portName
                     : $"{portName} ({manufacturer})";
 
+                string pnpDeviceId = device["PNPDeviceID"] as string ?? string.Empty;
+                if (TryGetLatencyTimer(pnpDeviceId, out int latencyTimer) && latencyTimer != RecommendedLatencyTimer)
+                {
+                    displayName += $" ⚠ BM={latencyTimer}";
+                }
+
                 ports.Add(new ComPortInfo(portName, displayName));
             }
         }
@@ -174,6 +187,35 @@ public partial class MainWindow : Window
         }
 
         return [.. ports.OrderBy(p => p.PortName, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    /// <summary>FTDI 仮想 COM ポートのレイテンシタイマー(BMオプション)をレジストリから読む。
+    /// デバイスの Device Parameters キーに LatencyTimer(REG_DWORD)として保存されている。
+    /// FTDI 以外のデバイスなど、そもそも無い場合は false を返す。</summary>
+    private static bool TryGetLatencyTimer(string pnpDeviceId, out int latencyTimer)
+    {
+        latencyTimer = 0;
+        if (pnpDeviceId.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using RegistryKey? key = Registry.LocalMachine.OpenSubKey(
+                $@"SYSTEM\CurrentControlSet\Enum\{pnpDeviceId}\Device Parameters");
+            if (key?.GetValue("LatencyTimer") is int value)
+            {
+                latencyTimer = value;
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is SecurityException or UnauthorizedAccessException)
+        {
+            // 読み取り権限が無い環境でも、警告表示を諦めるだけでアプリの動作は継続する。
+        }
+
+        return false;
     }
 
     private void OnConnectClick(object sender, RoutedEventArgs e)

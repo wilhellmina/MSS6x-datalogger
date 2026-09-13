@@ -82,7 +82,7 @@
 
                 <TextBlock Text="COM ポート" Foreground="{StaticResource SubtleForegroundBrush}"
                            VerticalAlignment="Center" Margin="0,0,6,0" />
-                <ComboBox x:Name="ComPortCombo" Width="110" VerticalAlignment="Center" />
+                <ComboBox x:Name="ComPortCombo" MinWidth="110" VerticalAlignment="Center" />
                 <Button x:Name="RefreshPortsButton" Content="更新" Margin="6,0,0,0"
                         Click="OnRefreshPortsClick" />
 
