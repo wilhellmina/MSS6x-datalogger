@@ -184,25 +184,34 @@
                             <ItemsControl x:Name="CategoryList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Expander IsExpanded="{Binding IsExpanded}" Margin="0,0,0,2"
-                                                  Foreground="{StaticResource ForegroundBrush}"
-                                                  Visibility="{Binding IsVisible,
-                                                               Converter={StaticResource BoolToVisibility}}">
-                                            <Expander.Header>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <CheckBox IsThreeState="True"
-                                                              IsChecked="{Binding AllSelected, Mode=OneWay}"
-                                                              IsEnabled="{Binding HasAnySelected}"
-                                                              Click="OnCategoryClearAllClick"
-                                                              VerticalAlignment="Center" Margin="0,0,6,0"
-                                                              ToolTip="カテゴリ内で選択中の項目を一斉解除します" />
+                                        <!-- 全解除ボタンは Expander の外(右隣)に独立して置く。
+                                             ヘッダーの中に置くと見出しの折りたたみトグルとクリック領域が重なり、
+                                             ボタンが無効化された瞬間にクリックがトグルへ突き抜けてしまうため。 -->
+                                        <Grid Margin="0,0,0,2"
+                                              Visibility="{Binding IsVisible,
+                                                           Converter={StaticResource BoolToVisibility}}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Expander Grid.Column="0" IsExpanded="{Binding IsExpanded}"
+                                                      Foreground="{StaticResource ForegroundBrush}">
+                                                <Expander.Header>
                                                     <TextBlock Text="{Binding Header}" FontWeight="SemiBold"
                                                                Foreground="{StaticResource ForegroundBrush}" />
-                                                </StackPanel>
-                                            </Expander.Header>
-                                            <ItemsControl ItemsSource="{Binding VisibleSections}" Margin="18,2,0,6"
-                                                          ItemTemplateSelector="{StaticResource SectionSelector}" />
-                                        </Expander>
+                                                </Expander.Header>
+                                                <ItemsControl ItemsSource="{Binding VisibleSections}" Margin="18,2,0,6"
+                                                              ItemTemplateSelector="{StaticResource SectionSelector}" />
+                                            </Expander>
+
+                                            <Button Grid.Column="1" Content="全解除"
+                                                    IsEnabled="{Binding HasAnySelected}"
+                                                    Click="OnCategoryClearAllClick"
+                                                    Padding="6,0" Margin="6,0,0,0"
+                                                    VerticalAlignment="Top" HorizontalAlignment="Right"
+                                                    ToolTip="カテゴリ内で選択中の項目を一斉解除します" />
+                                        </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

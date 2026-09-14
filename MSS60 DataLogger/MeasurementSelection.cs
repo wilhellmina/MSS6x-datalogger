@@ -189,31 +189,13 @@ public sealed class MeasurementGroup : INotifyPropertyChanged
         }
     }
 
-    /// <summary>見出し横の一斉解除チェックボックスの表示状態。全選択なら true、未選択なら false、一部だけなら null(中間状態)。
-    /// 全選択を持ちかけると上限超過などで意図しない挙動になりやすいため、このチェックボックスからは選択できないようにし、
-    /// 見た目の状態表示と一斉解除の起点としてのみ使う。</summary>
-    public bool? AllSelected
-    {
-        get
-        {
-            int selected = AllItems.Count(i => i.IsSelected);
-            if (selected == 0)
-            {
-                return false;
-            }
-
-            return selected == AllItems.Count ? true : null;
-        }
-    }
-
-    /// <summary>1 件でも選択済みの項目があるか。一斉解除チェックボックスを操作できるかの判定に使う。</summary>
+    /// <summary>1 件でも選択済みの項目があるか。全解除ボタンを操作できるかの判定に使う。</summary>
     public bool HasAnySelected => AllItems.Any(i => i.IsSelected);
 
-    /// <summary>見出しと、一斉解除チェックボックスの状態をまとめて更新する。</summary>
+    /// <summary>見出しと、全解除ボタンの有効状態をまとめて更新する。</summary>
     public void RefreshHeader()
     {
         Notify(nameof(Header));
-        Notify(nameof(AllSelected));
         Notify(nameof(HasAnySelected));
     }
 

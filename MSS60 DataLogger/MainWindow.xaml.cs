@@ -412,7 +412,7 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>カテゴリ見出しのチェックボックス。このカテゴリで選択中の項目をまとめて解除する。
+    /// <summary>カテゴリ見出し横の「全解除」ボタン。このカテゴリで選択中の項目をまとめて解除する。
     /// 全選択は同時記録数の上限超過などで意図しない挙動になりやすいため、一斉解除の用途に絞ってある
     /// (選択済みが 1 件も無いときは <see cref="MeasurementGroup.HasAnySelected"/> により操作不可にしている)。</summary>
     private void OnCategoryClearAllClick(object sender, RoutedEventArgs e)
