@@ -14,8 +14,13 @@
   <ItemGroup>
     <!-- EdInterfaceObd がシリアルポート(K+DCAN 等)を使うため必要。
          RuntimeIdentifier を明示しないと System.IO.Ports の実装 DLL ではなく
-         プラットフォーム非依存のスタブが解決され、実行時に PlatformNotSupportedException になる。 -->
-    <PackageReference Include="System.IO.Ports" Version="10.0.0" />
+         プラットフォーム非依存のスタブが解決され、実行時に PlatformNotSupportedException になる。
+         バージョンは 10.0.8 を指定する。これは EdiabasLib.dll が参照している
+         System.IO.Ports のアセンブリバージョン(10.0.0.8)と一致する唯一のパッケージバージョンで、
+         これに合わせないとビルド時に MSB3277(バージョン競合)警告が出る
+         (実行時は App.xaml.cs 側の AssemblyLoadContext.Resolving で吸収されるため実害は無いが、
+         バージョンを合わせれば警告自体を根本から無くせる)。 -->
+    <PackageReference Include="System.IO.Ports" Version="10.0.8" />
     <!-- COM ポートのプルダウンに製造元名(例: FTDI)を出すため、WMI(Win32_PnPEntity)経由で取得する。 -->
     <PackageReference Include="System.Management" Version="9.0.0" />
   </ItemGroup>
