@@ -12,6 +12,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using MSS60_DataLogger.Controls;
 using MSS60_DataLogger.Diagnostics;
+using MSS60_DataLogger.Localization;
 using MSS60_DataLogger.Logging;
 using MSS60_DataLogger.Settings;
 
@@ -38,6 +39,10 @@ public partial class MainWindow : Window
     private bool _suppressFavoriteUpdates;
     private string? _currentVin;
 
+    // 起動処理の途中では、言語プルダウンの初期選択がまだ空の _selection/_favorites で
+    // 設定を上書き保存してしまわないよう、SaveSettings を抑止する。
+    private bool _isInitializing = true;
+
     // 続けてチェックを付け外ししたときに毎回つなぎ直さないよう、少し待ってからまとめて反映する。
     private readonly DispatcherTimer _restartTimer = new() { Interval = TimeSpan.FromMilliseconds(700) };
     private bool _restartInProgress;
@@ -50,6 +55,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        InitializeLanguage();
+
         ValueGrid.ItemsSource = _rows;
         RefreshPortList();
 
@@ -60,6 +67,7 @@ public partial class MainWindow : Window
         };
 
         BuildCategoryTree();
+        _isInitializing = false;
     }
 
     private bool IsConnected => _sampler is not null;
@@ -222,25 +230,25 @@ public partial class MainWindow : Window
     {
         if (IsConnected)
         {
-            Disconnect("切断しました。");
+            Disconnect(UiText.Current.Disconnected);
             return;
         }
 
         if (ComPortCombo.SelectedItem is not ComPortInfo portInfo)
         {
-            SetStatus("COM ポートを選択してください。");
+            SetStatus(UiText.Current.SelectComPortFirst);
             return;
         }
 
         if (_selection.Count == 0)
         {
-            SetStatus("記録する項目を選択してください。");
+            SetStatus(UiText.Current.SelectMeasurementFirst);
             return;
         }
 
         if (!Directory.Exists(EcuPath))
         {
-            SetStatus($"SGBD フォルダーが見つかりません: {EcuPath}");
+            SetStatus(UiText.Current.SgbdFolderNotFound(EcuPath));
             return;
         }
 
@@ -296,14 +304,14 @@ public partial class MainWindow : Window
             if (old is not null)
             {
                 old.DetachEvents(); // 停止時の「切断しました」で新しい状態表示を上書きさせない
-                SetStatus("項目の変更を反映しています…");
+                SetStatus(UiText.Current.ApplyingSelectionChange);
                 await Task.Run(old.Dispose);
             }
 
             if (_selection.Count == 0)
             {
                 UpdateConnectionUi();
-                SetStatus("項目が選択されていないため切断しました。");
+                SetStatus(UiText.Current.DisconnectedNoSelection);
                 return;
             }
 
@@ -348,7 +356,7 @@ public partial class MainWindow : Window
 
     private void UpdateConnectionUi()
     {
-        ConnectButton.Content = IsConnected ? "切断" : "接続";
+        ConnectButton.Content = IsConnected ? UiText.Current.ConnectButtonDisconnect : UiText.Current.ConnectButtonConnect;
         ComPortCombo.IsEnabled = !IsConnected;
         RefreshPortsButton.IsEnabled = !IsConnected;
         RecordButton.IsEnabled = IsConnected && _selection.Count > 0;
@@ -424,7 +432,7 @@ public partial class MainWindow : Window
 
         if (IsRecording)
         {
-            SetStatus("記録中は項目を変更できません。いったん記録を停止してください。");
+            SetStatus(UiText.Current.CannotChangeWhileRecording);
             return;
         }
 
@@ -449,7 +457,7 @@ public partial class MainWindow : Window
             item.SetSelectedSilently(!item.IsSelected);
             _suppressSelectionUpdates = false;
 
-            SetStatus("記録中は項目を変更できません。いったん記録を停止してください。");
+            SetStatus(UiText.Current.CannotChangeWhileRecording);
             return;
         }
 
@@ -459,7 +467,7 @@ public partial class MainWindow : Window
             item.SetSelectedSilently(false);
             _suppressSelectionUpdates = false;
 
-            SetStatus($"同時に記録できるのは {MeasurementCatalog.MaxSelectableCount} 項目までです。");
+            SetStatus(UiText.Current.MaxSelectableExceeded(MeasurementCatalog.MaxSelectableCount));
             return;
         }
 
@@ -501,11 +509,12 @@ public partial class MainWindow : Window
         SaveSettings();
     }
 
-    /// <summary>選択項目・お気に入りの現在の状態を、次回起動時に復元できるよう保存する。</summary>
+    /// <summary>選択項目・お気に入り・表示言語の現在の状態を、次回起動時に復元できるよう保存する。</summary>
     private void SaveSettings() => AppSettingsStore.Save(new AppSettings
     {
         SelectedMeasurementArgs = [.. _selection.Select(d => d.Arg)],
         FavoriteMeasurementArgs = [.. _favorites.Select(f => f.Definition.Arg)],
+        Language = UiText.CurrentLanguage.ToString(),
     });
 
     #endregion
@@ -552,13 +561,79 @@ public partial class MainWindow : Window
     {
         if (IsRecording)
         {
-            SetStatus("記録中は項目を変更できません。いったん記録を停止してください。");
+            SetStatus(UiText.Current.CannotChangeWhileRecording);
             return;
         }
 
         foreach (SelectableMeasurement item in _favorites.ToArray())
         {
             item.IsSelected = false;
+        }
+    }
+
+    #endregion
+
+    #region 言語
+
+    /// <summary>保存済みの表示言語を復元し、言語切り替えプルダウンを用意する。</summary>
+    private void InitializeLanguage()
+    {
+        var options = new[]
+        {
+            new LanguageOption(UiLanguage.Standard, "標準語"),
+            new LanguageOption(UiLanguage.Osaka, "大阪弁"),
+        };
+
+        UiLanguage saved = Enum.TryParse(AppSettingsStore.Load().Language, out UiLanguage parsed)
+            ? parsed
+            : UiLanguage.Standard;
+
+        LanguageCombo.ItemsSource = options;
+        LanguageCombo.SelectedItem = options.First(o => o.Value == saved); // OnLanguageChanged 経由で反映される
+    }
+
+    /// <summary>言語プルダウン。切り替え時に文言を描き直し、初期化中でなければ保存する。</summary>
+    private void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (LanguageCombo.SelectedItem is not LanguageOption option)
+        {
+            return;
+        }
+
+        UiText.SetLanguage(option.Value);
+        ApplyLanguage();
+
+        if (!_isInitializing)
+        {
+            SaveSettings();
+        }
+    }
+
+    /// <summary>動的に設定している文言を、今の言語で描き直す。進行中のステータスメッセージ
+    /// (接続中・エラーなど)はここでは触らない。次に何かイベントが起きたときに自然と
+    /// 新しい言語で出るようになる。</summary>
+    private void ApplyLanguage()
+    {
+        RefreshPortsButton.Content = UiText.Current.RefreshButton;
+        ConnectButton.Content = IsConnected ? UiText.Current.ConnectButtonDisconnect : UiText.Current.ConnectButtonConnect;
+        SearchBox.ToolTip = UiText.Current.SearchBoxTooltip;
+        FavoritesClearAllButton.Content = UiText.Current.FavoritesClearButton;
+        FavoritesEmptyText.Text = UiText.Current.FavoritesEmptyText;
+        RecordButton.Content = IsRecording ? UiText.Current.RecordButtonStop : UiText.Current.RecordButtonStart;
+
+        if (!IsConnected)
+        {
+            StatusText.Text = UiText.Current.StatusInitial;
+        }
+
+        foreach (MeasurementGroup group in _groups)
+        {
+            group.RefreshHeader();
+        }
+
+        foreach (SelectableMeasurement item in _selectable)
+        {
+            item.RefreshLocalization();
         }
     }
 
@@ -625,14 +700,14 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            SetStatus($"ログファイルを作成できませんでした: {ex.Message}");
+            SetStatus(UiText.Current.LogFileCreateFailed(ex.Message));
             return;
         }
 
-        RecordButton.Content = "■ 記録停止";
+        RecordButton.Content = UiText.Current.RecordButtonStop;
         RecordButton.Foreground = (System.Windows.Media.Brush)FindResource("RecordingBrush");
         LogFileText.Text = _logWriter.FilePath;
-        RowCountText.Text = "0 行";
+        RowCountText.Text = $"0 {UiText.Current.RowsUnit}";
     }
 
     private void StopRecording()
@@ -647,10 +722,10 @@ public partial class MainWindow : Window
         _logWriter.Dispose();
         _logWriter = null;
 
-        RecordButton.Content = "● 記録開始";
+        RecordButton.Content = UiText.Current.RecordButtonStart;
         RecordButton.Foreground = (System.Windows.Media.Brush)FindResource("ForegroundBrush");
-        LogFileText.Text = $"保存しました: {path}";
-        RowCountText.Text = $"{rows:N0} 行";
+        LogFileText.Text = UiText.Current.SavedTo(path);
+        RowCountText.Text = $"{rows:N0} {UiText.Current.RowsUnit}";
     }
 
     #endregion

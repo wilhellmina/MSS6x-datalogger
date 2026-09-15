@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using MSS60_DataLogger.Diagnostics;
+using MSS60_DataLogger.Localization;
 
 namespace MSS60_DataLogger;
 
@@ -58,6 +59,13 @@ public sealed class SelectableMeasurement(
         _isSelected = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
     }
+
+    /// <summary>☆ボタンのツールチップ(言語設定に応じて変わる)。テンプレート越しにバインドするため
+    /// プロパティにしてある。言語切り替え時は <see cref="RefreshLocalization"/> で更新を通知する。</summary>
+    public string FavoriteTooltip => UiText.Current.FavoriteToggleTooltip;
+
+    public void RefreshLocalization() =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(FavoriteTooltip)));
 }
 
 /// <summary>カテゴリ内でさらに小分けした区画 1 つ分。<see cref="Name"/> が空文字なら見出しを出さずそのまま並べる。
@@ -192,11 +200,19 @@ public sealed class MeasurementGroup : INotifyPropertyChanged
     /// <summary>1 件でも選択済みの項目があるか。全解除ボタンを操作できるかの判定に使う。</summary>
     public bool HasAnySelected => AllItems.Any(i => i.IsSelected);
 
-    /// <summary>見出しと、全解除ボタンの有効状態をまとめて更新する。</summary>
+    /// <summary>全解除ボタンの文言・ツールチップ(言語設定に応じて変わる)。テンプレート越しに
+    /// バインドするためプロパティにしてある。</summary>
+    public string ClearAllButtonLabel => UiText.Current.CategoryClearAllButton;
+
+    public string ClearAllButtonTooltip => UiText.Current.CategoryClearAllTooltip;
+
+    /// <summary>見出しと、全解除ボタンの有効状態・言語設定をまとめて更新する。</summary>
     public void RefreshHeader()
     {
         Notify(nameof(Header));
         Notify(nameof(HasAnySelected));
+        Notify(nameof(ClearAllButtonLabel));
+        Notify(nameof(ClearAllButtonTooltip));
     }
 
     /// <summary>検索語で表示項目を絞り込む。語が空ならすべて表示する。</summary>

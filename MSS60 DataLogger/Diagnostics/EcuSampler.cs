@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using EdiabasLib;
+using MSS60_DataLogger.Localization;
 
 namespace MSS60_DataLogger.Diagnostics;
 
@@ -88,7 +89,7 @@ public sealed class EcuSampler : IDisposable
         EdiabasNet? ediabas = null;
         try
         {
-            StatusChanged?.Invoke($"{_comPort} に接続しています…");
+            StatusChanged?.Invoke(UiText.Current.ConnectingTo(_comPort));
 
             ediabas = new EdiabasNet();
             var obdInterface = new EdInterfaceObd { ComPort = _comPort };
@@ -136,12 +137,12 @@ public sealed class EcuSampler : IDisposable
             if (unsupported.Count > 0)
             {
                 string names = string.Join('、', unsupported.Select(d => d.Description));
-                StatusChanged?.Invoke($"この ECU では未対応のため除外しました: {names}");
+                StatusChanged?.Invoke(UiText.Current.UnsupportedMeasurementsExcluded(names));
             }
 
             if (supported.Count == 0)
             {
-                Faulted?.Invoke("選択した測定値がすべてこの ECU では未対応でした。");
+                Faulted?.Invoke(UiText.Current.UnsupportedAllMeasurements);
                 return;
             }
 
@@ -164,11 +165,11 @@ public sealed class EcuSampler : IDisposable
                 {
                     if (++consecutiveFailures >= 3)
                     {
-                        Faulted?.Invoke($"通信に失敗しました: {ex.Message}");
+                        Faulted?.Invoke(UiText.Current.CommunicationFailed(ex.Message));
                         return;
                     }
 
-                    StatusChanged?.Invoke($"再試行しています… ({ex.Message})");
+                    StatusChanged?.Invoke(UiText.Current.Retrying(ex.Message));
                     blockDefined = false;
                     Thread.Sleep(200);
                     continue;
@@ -186,7 +187,7 @@ public sealed class EcuSampler : IDisposable
                     // ブロックが ECU 側で失われた場合など。JA で定義し直す。
                     if (++consecutiveFailures >= 5)
                     {
-                        Faulted?.Invoke($"ジョブが繰り返し失敗しました (JOB_STATUS={jobStatus})。");
+                        Faulted?.Invoke(UiText.Current.JobRepeatedlyFailed(jobStatus));
                         return;
                     }
 
@@ -197,7 +198,7 @@ public sealed class EcuSampler : IDisposable
                 if (!blockDefined)
                 {
                     blockDefined = true;
-                    StatusChanged?.Invoke("接続しました。");
+                    StatusChanged?.Invoke(UiText.Current.Connected);
                 }
 
                 consecutiveFailures = 0;
@@ -206,12 +207,12 @@ public sealed class EcuSampler : IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            Faulted?.Invoke($"接続に失敗しました: {ex.Message}");
+            Faulted?.Invoke(UiText.Current.ConnectionFailed(ex.Message));
         }
         finally
         {
             ediabas?.Dispose();
-            StatusChanged?.Invoke("切断しました。");
+            StatusChanged?.Invoke(UiText.Current.Disconnected);
         }
     }
 

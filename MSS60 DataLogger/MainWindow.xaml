@@ -14,7 +14,7 @@
         <DataTemplate x:Key="MeasurementItemTemplate">
             <StackPanel Orientation="Horizontal" Margin="0,2">
                 <Button Click="OnFavoriteToggleClick" Background="Transparent" BorderThickness="0"
-                        Padding="2" Margin="0,0,4,0" Cursor="Hand" ToolTip="お気に入り">
+                        Padding="2" Margin="0,0,4,0" Cursor="Hand" ToolTip="{Binding FavoriteTooltip}">
                     <TextBlock FontSize="13">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
@@ -88,6 +88,11 @@
 
                 <Button x:Name="ConnectButton" Content="接続" Margin="14,0,0,0" MinWidth="80"
                         Click="OnConnectClick" />
+
+                <TextBlock Text="言語" Foreground="{StaticResource SubtleForegroundBrush}"
+                           VerticalAlignment="Center" Margin="20,0,6,0" />
+                <ComboBox x:Name="LanguageCombo" Width="100" VerticalAlignment="Center"
+                          SelectionChanged="OnLanguageChanged" />
 
                 <TextBlock x:Name="StatusText" DockPanel.Dock="Right" Text="未接続"
                            Foreground="{StaticResource SubtleForegroundBrush}"
@@ -205,12 +210,12 @@
                                                               ItemTemplateSelector="{StaticResource SectionSelector}" />
                                             </Expander>
 
-                                            <Button Grid.Column="1" Content="全解除"
+                                            <Button Grid.Column="1" Content="{Binding ClearAllButtonLabel}"
                                                     IsEnabled="{Binding HasAnySelected}"
                                                     Click="OnCategoryClearAllClick"
                                                     Padding="6,0" Margin="6,0,0,0"
                                                     VerticalAlignment="Top" HorizontalAlignment="Right"
-                                                    ToolTip="カテゴリ内で選択中の項目を一斉解除します" />
+                                                    ToolTip="{Binding ClearAllButtonTooltip}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -227,7 +232,7 @@
                         </Grid.RowDefinitions>
 
                         <DockPanel Grid.Row="0" Margin="0,0,0,6" LastChildFill="False">
-                            <Button DockPanel.Dock="Right" Content="選択中をすべて解除"
+                            <Button x:Name="FavoritesClearAllButton" DockPanel.Dock="Right" Content="選択中をすべて解除"
                                     Click="OnFavoritesClearSelectionClick" />
                         </DockPanel>
 
